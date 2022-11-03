@@ -1,0 +1,15 @@
+[package]
+name = "lula-dol"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+chrono = { version = "0.4.22", features = ["serde"] } 
+dotenv = "0.15.0"
+reqwest = "0.11.12"
+serde = "1.0.147"
+teloxide = "0.11.1"
+tokio = { version = "1.21.2", features = ["full"] }
+
