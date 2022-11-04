@@ -8,8 +8,9 @@ edition = "2021"
 [dependencies]
 chrono = { version = "0.4.22", features = ["serde"] } 
 dotenv = "0.15.0"
+once_cell = "1.16.0"
 reqwest = "0.11.12"
 serde = "1.0.147"
-teloxide = "0.11.1"
+teloxide = { version = "0.11.1", features = ["macros"] }
 tokio = { version = "1.21.2", features = ["full"] }
 
