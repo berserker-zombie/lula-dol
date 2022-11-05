@@ -1,60 +1,96 @@
-use std::{time::{Instant, Duration}};
-use once_cell::sync::Lazy;
-use teloxide::{prelude::*, utils::command::BotCommands};
-use tokio::sync::Mutex;
-use crate::client;
-
+use chrono::{Utc, Duration};
+use teloxide::{prelude::*, utils::command::BotCommands, dispatching::UpdateFilterExt};
+use std::{sync::Arc};
+use crate::{client, database};
 
 #[derive(BotCommands, Clone)]
 #[command(rename_rule = "lowercase", description = "These commands are supported:")]
 enum Command {
-    #[command(description = "display this text.")]
+    #[command(description = "Inicializa o LulaDol.")]
     Start,
-    #[command(description = "display this text.")]
+    #[command(description = "Mostra as opções do LulaDol.")]
     Help,
+    #[command(description = "Mostra a cotação mais recente do Dolar no Governo Lula.")]
+    Dolar,
 }
 
-static DAY: u64 = 60 * 60 * 24;
-static TIME: u64 = 15;
-
-struct QuotationMemoryInfo {
-    quotation: f64,
-    instant: Instant,
+#[derive(Clone)]
+struct ApiInfo {
+    pub key: String,
+    pub url: String,
 }
 
-impl QuotationMemoryInfo {
-    fn new(quotation: f64, instant: Instant) -> Self {
-        Self { quotation, instant }
-    }
-}
+const DOL_START: f64 = 5.30;
+const INTERVAL: i64 = 60 * 60 * 24; // 20 horas
 
-pub async fn start_bot() {
-    static MEM: Lazy<Mutex<QuotationMemoryInfo>> = Lazy::new(|| Mutex::new(QuotationMemoryInfo::new(7.0, Instant::now())));
-    let bot = Bot::from_env();
-    teloxide::repl(bot, handle).await;
-    // Command::repl(bot, answer).await;
-}
-
-async fn handle(bot: Bot, msg: Message) -> ResponseResult<()> {
-    static MEM: Lazy<Mutex<QuotationMemoryInfo>> = Lazy::new(|| Mutex::new(QuotationMemoryInfo::new(7.0, Instant::now())));
-    // Verifica se passou o tempo
-    println!("{}", msg.chat.id);
-    let mut mem = MEM.lock().await;
-    if mem.instant + Duration::new(TIME, 0) >= Instant::now() {
-        println!("ID: 1, Passando por aqui!");
-        return Ok(());
-    }
-    println!("ID: 0, Passando por aqui!");
-    mem.instant = Instant::now();
-    mem.quotation -= 0.10;
-    bot.send_message(msg.chat.id, format!("O Dólar está valendo R${}, companheiro!", mem.quotation)).await?;
-    Ok(())
-}
-
-async fn answer(bot: Bot, msg: Message, cmd: Command) -> ResponseResult<()> {
-    match cmd {
-        Command::Start => bot.send_message(msg.chat.id, format!("Tá na hora de salvar a democracia, companheiro!")).await?,
-        Command::Help => bot.send_message(msg.chat.id, Command::descriptions().to_string()).await?,
+pub async fn start_bot(key: &str, url: &str) {
+    let bot = Bot::from_env();    
+    let mem = match database::read_info() {
+        Ok(info) => info,
+        Err(_) => {
+            eprintln!("Falha ao carregar dados do banco de dados local. Consultando cotação via API");
+            let instant = Utc::now();
+            let quotation = client::get_dollar_quotation(&url, &key)
+                .await
+                .unwrap_or(DOL_START);
+            _ = database::create_info(database::Memory{quotation, instant});
+            database::Memory{quotation, instant}
+        },
     };
+    let shared_mem = Arc::new(database::MemoryWrapper::new(mem));
+    let api_info = ApiInfo{key: key.to_string(), url: url.to_string()};
+
+    let handler = Update::filter_message()
+        .branch(
+        dptree::entry()
+            .filter_command::<Command>()
+            .endpoint(commands_handler),
+        );
+    
+    Dispatcher::builder(bot, handler)
+        .dependencies(dptree::deps![shared_mem, api_info])
+        .enable_ctrlc_handler()
+        .build()
+        .dispatch()
+        .await;
+}
+
+async fn commands_handler(
+    shared_mem: Arc<database::MemoryWrapper>,
+    api_info: ApiInfo,
+    bot: Bot,
+    msg: Message,
+    cmd: Command,
+) -> Result<(), teloxide::RequestError> {
+    let text = match cmd {
+        Command::Start => { format!("Tá na hora de salvar a democracia, companheiro!") },
+        Command::Help => { format!("Os comandos disponíveis são: \n/start Pra inicializar o comunismo\n/dolar Pra saber o quanto o partido dos trabalhadores já melhorou a economia\nSe precisar de ajuda, mande um /help") },
+        Command::Dolar => {
+            let now = Utc::now();
+            let mem_wrap = &mut shared_mem.as_ref();
+            let mut mem = mem_wrap.lock().await;
+            println!("{:?}", mem);
+            if now.signed_duration_since(mem.instant) >= Duration::seconds(INTERVAL) {
+                println!("Atualizando cotação do dolar via API");
+                if let Some(quotation) = client::get_dollar_quotation(&api_info.url, &api_info.key).await {
+                    match database::create_info(database::Memory::new(quotation, now)) {
+                        Ok(()) => (),
+                        Err(_) => eprintln!("Não foi possível salvar a cotação no banco de dados. Seguiremos com o processamento.")
+                    };
+                    mem.quotation = quotation;
+                    mem.instant = now;
+                } else {
+                    eprintln!("Falha ao consultar a cotação na API.");
+                }
+            }
+            let percentage = (DOL_START - mem.quotation) / DOL_START * 100.0;
+            if percentage >= 0.0 {
+                format!("A cotação do dolar hoje é R${:.2}.\nMeu governo já melhorou o câmbio em {:.2}%.", mem.quotation, percentage)
+            } else {
+                format!("A cotação do dolar hoje é R${:.2}.\nDiante da ameaça fascista o câmbio piorou em {:.2}%.", mem.quotation, percentage)
+            }
+        },
+    };
+    bot.send_message(msg.chat.id, text).await?;
     Ok(())
 }

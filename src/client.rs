@@ -3,10 +3,9 @@ use std::collections::HashMap;
 use chrono::NaiveDate;
 use serde::Deserialize;
 
-
 type HttpClientResult<T> = Result<T, Box<dyn std::error::Error>>;
-pub const COTACAO_INICIAL: f64 = 5.30;
 
+#[allow(dead_code)]
 #[derive(Deserialize, Debug)]
 struct ApiLayerResponse {
     base: String, 
