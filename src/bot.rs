@@ -85,9 +85,9 @@ async fn commands_handler(
             }
             let percentage = (DOL_START - mem.quotation) / DOL_START * 100.0;
             if percentage >= 0.0 {
-                format!("A cotação do dolar hoje é R${:.2}.\nMeu governo já melhorou o câmbio em {:.2}%.", mem.quotation, percentage)
+                format!("A cotação do dolar hoje é R${:.2}.\nMeu governo já melhorou o câmbio em {:.2}%.", mem.quotation, percentage.abs())
             } else {
-                format!("A cotação do dolar hoje é R${:.2}.\nDiante da ameaça fascista o câmbio piorou em {:.2}%.", mem.quotation, percentage)
+                format!("A cotação do dolar hoje é R${:.2}.\nDiante da ameaça fascista o câmbio piorou em {:.2}%.", mem.quotation, percentage.abs())
             }
         },
     };
