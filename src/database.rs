@@ -1,5 +1,4 @@
-use std::{fs::File, io::{Write, Read, self}, ops::{Deref, DerefMut}};
-use tokio::sync::Mutex;
+use std::{fs::File, io::{Write, Read, self}};
 use chrono::{DateTime, Utc};
 use serde::{Serialize, Deserialize};
 
@@ -14,30 +13,6 @@ pub struct Memory {
 impl Memory {
     pub fn new(quotation: f64, instant: DateTime<Utc>) -> Self {
         Memory {quotation, instant}
-    }
-}
-
-pub struct MemoryWrapper {
-    memory: Mutex<Memory>
-}
-
-impl MemoryWrapper {
-    pub fn new(memory: Memory) -> Self {
-        MemoryWrapper { memory: Mutex::new(memory) }
-    }
-}
-
-impl Deref for MemoryWrapper {
-    type Target = Mutex<Memory>;
-
-    fn deref(&self) -> &Self::Target {
-        return &self.memory;
-    }
-}
-
-impl DerefMut for MemoryWrapper {
-    fn deref_mut(&mut self) -> &mut Self::Target {
-        return &mut self.memory;
     }
 }
 

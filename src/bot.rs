@@ -1,5 +1,6 @@
 use chrono::{Utc, Duration};
 use teloxide::{prelude::*, utils::command::BotCommands, dispatching::UpdateFilterExt};
+use tokio::sync::Mutex;
 use std::{sync::Arc};
 use crate::{client, database};
 
@@ -37,7 +38,7 @@ pub async fn start_bot(key: &str, url: &str) {
             database::Memory{quotation, instant}
         },
     };
-    let shared_mem = Arc::new(database::MemoryWrapper::new(mem));
+    let shared_mem = Arc::new(Mutex::new(mem));
     let api_info = ApiInfo{key: key.to_string(), url: url.to_string()};
 
     let handler = Update::filter_message()
@@ -56,7 +57,7 @@ pub async fn start_bot(key: &str, url: &str) {
 }
 
 async fn commands_handler(
-    shared_mem: Arc<database::MemoryWrapper>,
+    shared_mem: Arc<Mutex<database::Memory>>,
     api_info: ApiInfo,
     bot: Bot,
     msg: Message,
@@ -67,8 +68,7 @@ async fn commands_handler(
         Command::Help => { format!("Os comandos disponíveis são: \n/start Pra inicializar o comunismo\n/dolar Pra saber o quanto o partido dos trabalhadores já melhorou a economia\nSe precisar de ajuda, mande um /help") },
         Command::Dolar => {
             let now = Utc::now();
-            let mem_wrap = &mut shared_mem.as_ref();
-            let mut mem = mem_wrap.lock().await;
+            let mut mem = shared_mem.lock().await;
             println!("{:?}", mem);
             if now.signed_duration_since(mem.instant) >= Duration::seconds(INTERVAL) {
                 println!("Atualizando cotação do dolar via API");
